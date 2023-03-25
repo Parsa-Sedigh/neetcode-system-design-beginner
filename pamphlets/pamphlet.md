@@ -57,4 +57,6 @@ some threshold.
 
 logging -> metrics -> alerts
 
+These components are running on different computers. So there's some network component between them.
+
 ## 2 - Design Requirements
