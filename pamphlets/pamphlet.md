@@ -65,10 +65,10 @@ These components are running on different computers. So there's some network com
 ## 2 - Design Requirements
 ### design requirements
 1. move data: Can be moving data from a component of machine to another component or from one data center to another data center.
-Moving data isn't so simple when machines are located at different data centers. We have to move data across networks
+   Moving data isn't so simple when machines are located at different data centers. We have to move data across networks
 2. store data
 3. transform data: For example, given a bunch of server response logs data, maybe we want to aggregate that data and transform it to find out
-what percentage of them was successful? and what percentage was failed?
+   what percentage of them was successful? and what percentage was failed?
 
 
 These 3 operations encapsulate all of the functionalities of most apps.
@@ -89,7 +89,7 @@ As AWS, we would define SLA for our DB. It would be the SLO which is we want our
 if we don't reach the level of availability(determined by SLO), we will give you a partial refund. It's a AWS policy actually.
 
 SLA is what customers can expect of our service and what's they pay for. It's a customer agreement. Service level agreement. It's not just a goal,
-it's an agreement with a customer and says: this is what you can expect or these will be the consequences. 
+it's an agreement with a customer and says: this is what you can expect or these will be the consequences.
 
 ---
 
@@ -98,7 +98,7 @@ Systems can have reliability, full tolerance and redundancy. These contribute to
 
 If a user makes a req to our server and it responds, that means our server was available but doesn't necessarily mean our server is reliable.
 
-Reliability is the probability that our system won't fail. We know if we just have a single server that's responding to users, we have a 
+Reliability is the probability that our system won't fail. We know if we just have a single server that's responding to users, we have a
 higher probability of failing than if we have 2 servers. So by adding a server, we can increase the reliability of our server, but we're also
 increasing the availability of system because for example if we have a single server, a lot of reqs could be sent to it or we can have
 people maliciously trying to take our server down(DDOS attack - distributed denial of service attack).
@@ -114,7 +114,7 @@ So fault tolerance is related to reliability.
 ### redundancy
 We add a server that's running the exact same code that we don't need it in order to respond to users. Because the other server is capable
 of doing everything. But it helps to have both because in the event of a fault, we have multiple copies, so our system continues to function because
-of redundancy. 
+of redundancy.
 
 By having redundancies in our system, we're able to have fault tolerance and with fault tolerance, we can provide higher reliability.
 
@@ -128,24 +128,24 @@ Means the amount of operations or data or sth we can handle over some period of 
 the throughput of this, in terms of **reqs per second**(request/second). This means how many concurrent users, could our system
 handle per second.
 
-If we can horizontally or vertically scale, we can handle more reqs. 
+If we can horizontally or vertically scale, we can handle more reqs.
 
 But when we only scale vertically, that server is a **single point of failure**. If it goes down, our entire system
 goes down. So we need more reliability, fault tolerance and redundancy.
 
-If we scale it horizontally, the downside is adding more complexity. Because we have to balance the reqs between servers. So we need a 
+If we scale it horizontally, the downside is adding more complexity. Because we have to balance the reqs between servers. So we need a
 load balancer which increases the complexity.
 
 Horizontal is less limited.
 
-When we talk about how many reqs a DB can handle(throughput of DB), we usually measure it in terms of queries per second(queries/second) or 
+When we talk about how many reqs a DB can handle(throughput of DB), we usually measure it in terms of queries per second(queries/second) or
 QPS and it's similar to servers. We can even call it reqs/second ! Query is just more used when talking about DBs.
 
 
 DBs have the same problems as servers. Where a single DB can be a single point of failure. Horizontal scaling vs vertical scaling.
 In horizontal scaling of DB we need to keep data in multiple DBs in sync.
 
-A third measurement of throughput is **amount of data per second** usually measured in bytes/second . This is a variation of reqs/second or 
+A third measurement of throughput is **amount of data per second** usually measured in bytes/second . This is a variation of reqs/second or
 queries/second.
 
 In servers, it makes more sense to measure it in terms of reqs/second because each req is mapped to a single user.
@@ -168,7 +168,7 @@ Another technique for reducing latency is having CDN.
 An IP address is a 32 bit integer and you have 12 digits in total: 012.345.678.910
 
 Since it's 32 bit, we can't have all of the digits go up to 999. Because that wouldn't fit in a 32 bit integer. So the max value for each of these
-is gonna be 256. So the biggest IP address we could contain: 256.256.256.256 (at least when you look at it as a single integer) 
+is gonna be 256. So the biggest IP address we could contain: 256.256.256.256 (at least when you look at it as a single integer)
 
 With 32 bits we can store up about to 4 billion unique public IP addresses. This is limiting. This limitation is related to IPV4.
 
@@ -227,7 +227,7 @@ But for clients we don't need static IP address(in our local network, we don't h
 It's a 16 bit value so 2^16 which is about 65000 ports for a machine.
 
 Many application layer protocols have a default port. So when we use https to communicate with a server, we don't need to specify the port(443 in this
-case). Because the default port for https is 443. 
+case). Because the default port for https is 443.
 
 So from perspective of client, we send req to a specific port of server, but when server send res back using a port, that doesn't necessarily need
 to be port 443, actually from client's perspective, it doesn't matter which port we receive that info on. So the protocol will randomly assign
