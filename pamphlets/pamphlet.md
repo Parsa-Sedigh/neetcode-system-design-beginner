@@ -482,10 +482,266 @@ In caching we wanna speed things up and we're willing to make some tradeoffs(lik
 
 ## 11-11 - CDNs
 ## 12-12 - Proxies and Load Balancing
+
+
 ## 13-13 - Consistent Hashing
+We can use hashing(instead of round-robin) to balance the reqs to servers. Let's say we want to hash based on the user's IP address.
+
+One benefit of hashing approach compared to round-robin is the same user(same IP address) will always be routed to a specific server even though
+that server is not the one with the lowest amount of traffic.
+
+What is the benefit of this user always going to a specific server?
+
+If our servers are REST APIs and therefore stateless, it doesn't really matter. But if each of the servers has redis cache attached to it and it's
+not a shared cache and let's say these servers are not stateless, they are caching sth for their users. So this works with hashing load balancing.
+But if we were doing round-robin the req goes to server 0 then we cache sth there, but next time it goes to another server, so we would have a
+cache miss.
+
+So by using consistent hashing, same user reqs are mapped consistently to the same server and we get caching. 
+
+So hashing in load balancing is more suited if we want user req to be mapped consistently(to the same server). This is where consistent hashing comes in.
+
+The problem arise when we remove on the servers(maybe it crashed or ...). Ideally the users of server 1 should still go to server 1 and ... and 
+the user reqs of this down server should be balanced between other servers. Currently, the number of servers is changed.
+So our hashing function gonna change. So the req of some users will be routed to other server and therefore we would have cache misses for the first
+time and their data that was previously on cache of another server, is now useless.
+
+This is not an intelligent way. We don't want to change where user's req is going even after a server goes down.
+
+**Q:** How we can do consistent hashing?
+
+A better approach(still using consistent hashing) is:
+
+The idea is our servers are gonna be placed on some type of **circular** space. We take user reqs and instead of directly hashing and mapping
+those to a server, we're gonna be mapping each req somewhere onto that circle using hashing function. If we map to the circle and there was no
+server there, we're gonna keep moving **clockwise** on the circle and we assign that req to the first server or node that we arrive.
+
+So far, this is exactly as our basic hashing approach was before, we're distributing reqs roughly evenly across servers. Now the different is going
+to be when we remove one of the servers. You might be thinking: Now we our less servers, isn't our hashing function gonna change? and therefore
+the servers handling the user's reqs gonna change and we would have cache misses and ... ?
+
+No! the reqs will be routed to where ever they were routed before. Now the req of the crashed server will go clockwise on circle to the first
+server they arrive(in theory). So load balancer will route the req of crashed server to server 0 and other reqs are still routed to the same
+servers before. This is the best we can do.
+![](../img/13-13-1.png)
+
+Note: Ideally we want the reqs of the crashed server to be balancer between the remaining servers. But in our solution, all of those reqs will be
+go to the next server on circle clockwise. So that first clockwise server will be handling about 2 times more reqs. There are solutions for this ... .
+
+The same thing would happen as we **add** servers.
+![](../img/13-13-2.png)
+
+Consistent hashing helps us in:
+- load balancing:  
+- CDN: Routing reqs to different CDN servers. We would in some cases keep that consistent(route to the same server).
+- database: Imagine instead of servers, we had DB nodes. We split or shard our DB into for example 3 nodes and we keep a third
+of our user data on one node, a third on another and third on the other, to be able to handle more traffic and with consistent hashing,
+we route the req to the one that has his data.
+
+Another hashing algo that is comparable to consistent hashing is rendezvous hashing. It tries to accomplishes the same thing as consistent hashing.
+
+### Main components of consistent hashing
+- hash key: In our case was the IP address. It needs to be sth that can identify a user and then we consistently map it to a node
+- hash function: would be sth like a variation of sha(secure hashing algorithm) 
+- nodes: Like servers or DB partitions(shards). In servers, they can also be CDNs. The number of them can be increased or decreased and if we
+need to consistently map a user req to the same node, we need consistent hashing.
+
 ## 14-14 - SQL
 ## 15-15 - NoSQL
 ## 16-16 - Replication and Sharding
+These two are different but related.
+
+With single DB node, all of our app data is on that DB. As we get more traffic and have manny connections to this DB at the same time or
+maybe we're processing so much data from DB(every query has to read through so much data) and because of these, we can't handle as many
+reqs as we're getting.
+
+We need replication. We create a copy of our DB(replicate it) and now we're able to handle more req. But replication has a lot of nuances and
+tradeoffs and decisions.
+
+### Leader-follower(master-slave) replication
+This is for scaling up our reads.
+
+When we replicate a DB, we create a follower DB of the initial one, the leader is the one that's responsible for replicating it's own data to one or
+more followers.
+
+Now the followers could also replicate data as well, or maybe the leader will be the one responsible for replicating to all the followers but that
+doesn't make sense, it's ok if the followers pick up some of the work if they're able to do that.
+
+We can read and write data to leader node. But with a leader-follower replication, we're only allowed to read from the follower DB and we're not
+allowed to write to it, because the way our replication is working. Our leader is gonna replicate it's data to followers. But **if** we allow
+the client(our server) write data to the follower, the follower is not replicating it's data to other nodes like leader.
+
+Now obviously with this, we're able to scale **reads** which is usually more important. Usually reading is more common. Also the reliability and
+availability are increased, because if one of the DBs goes down(like leader goes down), at least we have mostly up to date replica that has most
+of the data. So it can take the leader's place.
+
+There are different strategies for replicating data.
+
+### tradeoffs in replicating
+The tradeoff is async vs sync data replication.
+
+Async is when we don't have to do it immediately. After writing to leader of course, in async approach, at some point leader will take this data
+and replicate it to the followers. 
+
+The replication could be on schedule or could be a few seconds later the leader will take the transaction(the client made) and make that same 
+transaction on the followers.
+
+The downside with async is other clients that are reading from the followers, may see inconsistent data. We would have inconsistencies between
+leader and followers for some period of time.
+
+In sync replication, everytime a user has a write transaction on the leader, the leader will stop and **immediately** take that write transaction
+and replicate it to the followers and only after these are done, the transaction is considered complete. We won't have inconsistent data.
+Downside is we have more latency. If the replicas are in different parts of world, latency would increase significantly.
+
+### leader-leader replication(multi master replication)
+In this case we have multiple leaders. The benefit here is we can read and write from every single node(all of them are leaders). We scale up reads **and**
+writes. It has tradeoffs. OFC replicating data between multiple leaders can get very complicated. OFC these replicas are gonna get out of sync.
+Some data will be written in one leader, some data will be written in another one, these replicas need to sync themselves.
+
+With multiple leaders we'll have lower consistencies. But we'll scale up the writes.
+
+With async replication in this case, our data will be loosely consistent(but it's definitely not going to be consistent) and with sync,
+we'll have much higher latency depending on how many leaders we have and how they are geographically distributed around the world.
+
+**Tip:** The main reason you'd want to use multi-leader replication is if you had one leader serving every continent of the world.
+Now if these db nodes(leader nodes in this case) become out of sync, it's OK because everybody in that continent gonna be mainly interacting with
+one the nodes and everybody from other side of world(let's say we have 2 leader nodes) is mainly gonna be interacting with the other one.
+
+Now sometimes people from one side of world might fly to the other side, that's OK because we're gonna keep these nodes in sync but maybe every hour.
+But we don't have to do it immediately. This is the main use case of multi-leader replication which is being able to serve different parts of 
+world roughly independently.
+
+### Sharding
+Implementing it is very hard.
+
+Similar to replication, if we have a DB that's getting so much traffic that a single DB can't handle it. We try to horizontally scale this DB.
+One approach would be replication. But sometimes that's still not enough. What if we had a massive amount of data, not TB but PT(petabytes) and
+searching that amount of data in a single machine would take multiple seconds. This is where sharding comes in. We not only put this data on
+multiple machines on multiple nodes and computers but we take the data itself and split it into smaller DBs. Literally we take a table and
+for example put half of it's data into one DB which will be **on it's own machine**(if we put both DBs after sharding into one machine, that's not
+solving any problems, we put them on different machines to have more resources) and the second half of table goes to other DB on separate machine.
+
+These new DBs are called shards.
+
+Now reading and writing will go to individual shards and not only we're able to handle more traffic, because now maybe half of traffic goes
+to one shard(node) and rest to other shard. But also the queries themselves will run(on shards OFC) faster because of fewer data.
+
+Q: How do we decide how to shard the DB?
+
+#### There are a couple of approaches:
+- range-based: we would take some range of values and some other range of values and decide what range do we actually use?
+That's called the **shard key** which is a special value that's used to decide how to split the data and one type of shard key is
+range-based shard key. For an individual table, we would typically choose the primary key to decide how to split the data.
+Using that primary key, we say that some range of values go to one shard and other to other shards. FOr example based on last name, we could say
+A-L is gonna go to first shard and second half go to other shard. But now, running JOINs on two halfs of a table is gonna be complicated(slow or
+might not work). When we shard, maybe the data in one shard is related to other shard. So keeping things consistent is hard, we need custom logic.
+- hash-based sharding: This is a use case for consistent hashing. Consistent hashing is an algo to shard data(to decide how to distribute data
+into multiple shards)
+
+Popular SQL DBs like mysql and postgres, do not have sharding by default. If you want to shard them, you have to implement the logic for that
+at application level. For example how to know where to find data(which shard has the data you're looking for) and it makes sense because SQL DBs
+naturally are not meant to distributed in this way. When we do sharding SQL DBs, we're losing the consistency that we get from ACID where we know
+the foreign key constraints and other constraints we specify in DB is gonna be enforced, we lost these with shards.
+
+
+Most NOSQL DBs will have sharding by default(it will be implemented as part of DB management system). Nosql DBs are naturally meant to be sharded.
+That was the whole point of nosql DBs that we can horizontally scale them better, because we're not going to be JOINing data that much,
+we're not gonna have foreign key constraints, our data is non-relational. The data doesn't even have to be consistent in nodes, it will be
+eventually consistent.
+
 ## 17-17 - CAP Theorem
 ## 18-18 - Object Storage
+Newer than filesystem. It's much more comparable to a filesystem than it is to an actual DB. Because in DB how we structure and filter
+and search for a data is much more important with DBs. But with object storage, data is stored in a flat way. There's no hierarchy, but with filesystems
+we have folders and more folders and ... . In object storage there's not anything like folder.
+
+AWS S3, google cloud storage, ... .
+
+These services kinda give the illusion of a filesystem, with s3 you can have folders and files inside of them. But in that case, the folder is 
+actually just part of the name of the file, it's a way to give you that illusion, there aren't hierarchies with object storage, all of the objects
+in S3 are stored in a flat way.
+
+The predecessor to object storage was blob storage and when we talk about objects we mean blobs. Blob stands for(binary large object).
+Media things like images, videos, a database backup(it's not media but it's a large object), we store files but typically not a regular text file that
+we expect to update, because when we put files and objects in object storage, we can write those files to object storage(add files to object storage)
+and then we can read from storage, but we can't update that file. That's one tradeoff with object storage.
+
+Object storage is optimized to store a large amount of objects in a flat way(so no hierarchy) so that we can immediately find objects that we have
+stored, sorta like a hash map where every object has a unique key so that gives us a quick way of accessing that file.
+
+Also we can't have duplicates in hash maps and that's another similarity with blob storage and object storage.
+
+In object storage, we need a globally unique names, it's not enough to have a unique name in your s3 instances, but if you have a name conflict with
+anybody else who's using that object storage(like s3) that doesn't work either, it should be global in whole s3.
+
+### use cases
+If we're storing large files like img, video, media or anything for long term storage in general, we could of course use DB and store them in DB.
+But it doesn't make sense because are we ever gonna be querying based on image? or a video? Or we wanna use some metadata related to an img like
+the name of the img or tag related to it or ... and we can store that metadata instead of the img itself in DB.
+
+Another reason of not storing media in db is: videos and imgs are large files when we store them in DB, they're gonna slow down our queries, increase
+our storage and we're gonna be reading and writing from DB a lot and having these stored in DB, makes it if a user wants to see an img or vid,
+we have to read it from DB and from app, send that back. It's better to use object storage.
+
+The interface for reading and writing files from object storage is with HTTP. So we don't have to query anything or write any SQL, we don't need
+to read the entire object storage, we can make a network req to object storage, ask for whatever filename we want(we need to configure it so
+we're the only ones who can access this file). So via HTTP, we get back the media and send it back to user. 
+
+
 ## 19-19 - Message Queues
+If we have a large amount of application events and those app events are going fast so much so that maybe our app server can't handle them
+all at once and we want to process these events asynchronously.
+
+Now of course we could scale up our servers but if we really don't need to do these processing all at once and at the same time, it's better
+to queue these events and handle them at some later time and that's what message queues can provide for us.
+
+The events will go to message queue and then from that queue, those events will then to our application server and finally our server will process
+those. For example the payment events. The queue is durable(persisted). If the queue crashes, the data will still remain there. It's not
+stored in RAM, it's usually being stored on disk.
+
+We decoupled the events. It could be it's own server creating events. In other words, we've decoupled these services - the one that
+will produce the events and then one that will receive and process those events. Tbe queue architecture will allow us to process the events
+asynchronously and allow us to handle a larger amount of scale because those events don't need to be processed instantly, we can queue them.
+With this type of example, we probably process them FIFO.
+
+Pros of message queues:
+- durable: So in some ways they're similar to DBs
+- 
+
+The way data is transported between the queue and the destination(app server), can vary. It can either be **pulling** where the destination is
+pulling from the queue. It's periodically checking does the queue have any new messages? If it does, I'm gonna take some of them.
+
+We can also **push** messages directly from the queue to the destination whenever we get them on demand.
+Now in some cases, if we were pushing data, the app server(destination) may not be able to process the data immediately or maybe it may have
+missed the message or sth may have gone wrong. For this, there's a way for the destination to tell the queue it can acknowledge that it received
+a particular message(it can ack that message) and after that's done, the queue will know that this particular message that it was trying to send,
+has been received and processed by the destination, so it doesn't need to send that message anymore. If the queue sent a message
+and it did not receive an acknowledgment from the server, then the queue would try again. It would keep trying to send the message a certain number
+of times or until the server acknowledge that it received the message and processed it. This is a way where we don't loose messages. We don't send
+messages to the destination that it can't process and then those messages get dropped(we never see them again), we don't want that to happen. For this,
+there's a lot of features like this that are built into queues to make them durable and reliable.
+
+There could be multiple apps feeding into the queue and could be multiple apps receiving from the queue and this brings us to pub/sub were we
+get this sort of many-to-many relationships. 
+
+### Pub/sub (publisher/subscriber)
+Variation of message queueing. In this case, the app event producers will be publishers and the event receivers will be the subscribers.
+These events will go to some middle layer(part of message queue), we will get topics and these topics will be the ones that receive and store
+those messages from publishers and persist them and topics will feed into subscriptions. There could be multiple subscriptions that a single topic
+is feeding into and the purpose of this is that multiple apps can receive from the same topic.
+
+For example a single topic may receive all payment data and another topic receives analytics info and this analytics topic will feed into
+a single subscription and we have a single app server to receive all the analytics events and then we write them to some logs DB.
+But for payments info, we need 2 servers to receive them One server is going to process that payment and then another server is going to do sth
+with it, maybe back it up to a DB or a data warehouse.
+
+Topics receive data and segregate data. Maybe we want half of data to go to this topic and the other half of data is completely unrelated, so we want
+them to go to another topic.
+
+**Subscriptions** are a way for us to fan-out these topics. Because maybe it's not just a single app that needs this topic of message, but maybe
+we need multiple apps, so we fan it out to multiple subscriptions and then that's where our application logic comes in, it will receive messages
+from subscription(a single app could receive from multiple subscriptions if we want it to).
+
+The whole idea is we have all this logic in the message queue so that we decouple our app. So we can get rid of a server(a destination) and replace it
+and when doing this, we don't have to change our entire architecture. That's the benefit.
+
