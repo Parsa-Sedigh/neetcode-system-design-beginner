@@ -547,7 +547,74 @@ Another hashing algo that is comparable to consistent hashing is rendezvous hash
 need to consistently map a user req to the same node, we need consistent hashing.
 
 ## 14-14 - SQL
+Relational database management systems(RDBMS). SQL is a major component in most relational db management systems.
+
+SQL is a query language - it's a way we can access the data that's stored in a RDBMS.
+
+Data of relational DB management systems are stored on disk. Because we want the data to be persisted. Since we're gonna be storing a very very
+large amount of data on disk, we want to organize it in a way where we can read and write from it efficiently.
+
+The data structure that's typically used for RDBMSes is **B+ tree** which is kinda like a binary tree where each node doesn't have to have
+at most 2 children, instead, it can have m children(arbitrary number) and also every node, every node doesn't have a single value, instead
+we split each node into `m - 1` values. The reason we use m-way trees rather than binary trees is because this will help us reduce the size
+of our tree. We want to minimize the number of reads and writes that we have to do. 
+
+Note: The entire of m-way trees(B+ trees) is not stored on disk because these trees can get very very large and to get the data we want, we
+may traverse the entire height which can get very large. So increasing the number of children for every node is a way to reduce the height and
+to to take this one step further, data is actually **only** stored in the leaf nodes of the tree and the non-leaf node's values just
+help us get to the data(leaf nodes), all the data is stored at the leaf level and it's stored in a sort of linked list fashion(the values in
+leaf nodes are ordered). This is how relational DBs are stored.
+
+Tip: The way we key the data itself: Let's say we're organizing some data, let's say we're organizing it based on phonebook and that phonebook
+maps a name to a phone number. Now how would we want to search for people in that phonebook? We would want to use their phone number or their
+name?
+
+Their name. So we key the tree based on name(it has alphabetical order).
+
+When we key the tree based on some value, that value is called the **index**. We need to choose our index intelligently.
+
+Indexes are about having some sorted property.
+
+The main motivation is about being able to find and read data as quickly as possible.
+
+What we can accomplish with RDBMSes?
+
+With the table, we specify what the data needs to look like.
+
+Primary key uniquely identifies every record(row) in a table.
+
+Constraints are not usually possible with NOSQL DBs.
+
+Q: What are the tradeoffs of relational databases when it comes to system design?
+
+### ACID properties
+The vast majority of RDBMses are ACID compliant:
+- A - atomicity: **every DB transaction is all or nothing.** You can't split a DB transaction. If a part of transaction gets done but then
+our computer crashes and we don't do the other part of transaction and commit it, then the **entire** transaction is gonna fail(including the
+first part). In other words, if the entire transaction didn't complete, then none of it completed and if the entire transaction did complete,
+only then it's persisted(we don't commit half of the transaction). Example: Sending money from Alice to Bob. Note: Sometimes atomicity is not
+necessary.
+- C - consistency: it means data consistency(there are different consistency that's used in different acronyms). This is following the constraints or
+rules that we as developers specify on DB(not null columns, foreign key constrains and ...). If we didn't have atomicity and isolation, it would be
+hard to follow the constraints that we specify, so we would end up in consistent state. Consistency is expensive to maintain. For example if
+we want to have a foreign key constraint, everytime we update our DB, we need to look out for these columns. So we create constraints or rules
+and our DBMS makes sure we follow those rules that we never reach an inconsistent state.
+- I - Isolation: when we have multiple transactions happening concurrently on a DB, you want the transactions to appear as if they happened in order.
+We don't want multiple transactions to have side effects on each other. If we wouldn't have isolation, we would have dirty reads and
+phantom reads(non-repeatable reads) and other problems. **Dirty read:** Let's say we have 2 transactions running concurrently working on the
+same data and one of them commits which but another not and our DB crashes, so we would be left with wrong data. So while the first one did not 
+commit but the second did commit(we have atomicity), we still left with wrong data. What went wrong? The second transaction read a value
+that was not committed yet and this is called a **dirty read** and it can lead us to inconsistent state. Isolation means these transactions are
+serialized, they will be executed in a particular order. So one of them will execute first and then the other one. So even though it kinda
+appears that the transactions are happening concurrently and they might be, because concurrently doesn't mean in parallel, they will appear
+as if they were executed serially in a particular order(one executed and completed before another one).
+- D - durability: This is why RDBMSes use disk. Because of this, redis is not ACID compliant(yeah it can be used as DB too and not only
+a cache - redis stores data in memory). A DB transaction is more than just a query, it could be a collection of queries. Every transaction
+that's been committed, we expect it to be durable(persisted) even if the DB crashed after that.
+
 ## 15-15 - NoSQL
+
+
 ## 16-16 - Replication and Sharding
 These two are different but related.
 
