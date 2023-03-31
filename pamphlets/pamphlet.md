@@ -607,13 +607,82 @@ commit but the second did commit(we have atomicity), we still left with wrong da
 that was not committed yet and this is called a **dirty read** and it can lead us to inconsistent state. Isolation means these transactions are
 serialized, they will be executed in a particular order. So one of them will execute first and then the other one. So even though it kinda
 appears that the transactions are happening concurrently and they might be, because concurrently doesn't mean in parallel, they will appear
-as if they were executed serially in a particular order(one executed and completed before another one).
+as if they were executed serially in a particular order(one executed and completed before another one). The transactions behave as if they were
+performed serially.
 - D - durability: This is why RDBMSes use disk. Because of this, redis is not ACID compliant(yeah it can be used as DB too and not only
 a cache - redis stores data in memory). A DB transaction is more than just a query, it could be a collection of queries. Every transaction
 that's been committed, we expect it to be durable(persisted) even if the DB crashed after that.
 
 ## 15-15 - NoSQL
+NOSQL stands for **not only sql**. We don't have standard query language for NOSQL DBs.
 
+A better name for these type of DBs is **non-relational**. So we can't use SQL to query them.
+
+The biggest problem NOSQL are trying to solve is **scale**.
+
+These DBs have a lot of variations.
+
+### A few variations of NOSQL DBs
+- key-value store: most simple variation. You can argue, most of these aren't necessary a DB. Because most of these are in-memory stores and they
+don't use disk redis, memcached, etcd. We would have a key and map it to object which is gonna be flat in nature. These are good in 
+simple scenarios and if you need to read and write a lot of data very quickly, since they use RAM, they're fast. Usually key-value stores
+are used **together** with a primary DB and key-value stores will typically be used for cache.
+- document store(document DB): a document typically is a JSON. Document would have some kind of primary key that is identifying it. The document
+is not flat in nature, it's nested. Like Mongodb. The benefits: 
+   - flexibility: it's a lot more flexible than a regular SQL DB where we have to define a **schema** for table.
+      In NOSQL, we don't have schema for docs. We can do anything.
+   - scale
+- wide-column DBs: can handle massive massive scale, but they're typically oriented for a lot of writes like time-series data. These do have
+flexibility that document-based DBs have where we don't necessarily have to have a schema, but sometimes we **can** have a schema in wide-column DBs.
+It's better to use these DBs when you don't need to read and update a lot. After writing, we don't expect to update it again which would be the
+case with time-series data and other scenarios. Like Cassandra and google big table.
+- graph-based DBs: These are actually all about **relations**!  Storing people following each other can get hard in SQL tables and everytime
+you wanted the followings of a person and among those followings, what are the secondary connections(Friends of your friends)? These types of
+relations are hard to represent with SQL and it can get expensive when you have JOINs on multiple tables and you have to do that for millions of
+records in a table. It's better for these followings(social media) to be solved with graph(directed graphs).
+
+### Motivation for NOSQL DBs
+The biggest motivation is scalability. NOSQL DBs can generally scale alot better than SQL DBs and this is because of restrictions we put
+on SQL(relational) DBs especially the ACID properties. The problem with this, is if we have a single SQL DB and it's really big and it's handling
+a lot of reqs(like 1000 req/s) and we want to scale this DB up. **The easiest way to scale a SQL DB is vertically**. It's hard to scale horizontally
+with relational DBs(SQL DBs) because of ACID and ... . Some problems when sharding(SQL DBs):
+- Q: How do we know how to route a req to the correct DB(when we splitted out a DB into multiple nodes(shards))?
+- How do JOINs between the shards? and we tried to enforce the constraints(foreign key, unique and ...)
+
+**Tip:** Horizontal scaling is unlimited and it's better if it's possible(because it's much more powerful than vertically).
+
+NOSQL DBs generally do not follow the ACID:
+- atomicity: Many times they will have atomic transactions, 
+- consistency: they don't have consistency(they don't have foreign key constraints and ...)
+- isolation: they don't necessarily perform transactions in isolation.
+- durability: Generally they're durable(in memory stores are not durable though)
+
+NOSQL DBs sacrifice ACID so that they can scale. For example when we shard them, since we don't have any foreign keys to worry about and
+we're probably not gonna do JOINs between shards. So this allows us to split data into multiple nodes(shards) and horizontally scale the data.
+
+NOSQL DBs have their own acronym like **BaSE** which boils down to eventual consistency.
+
+### eventual consistency
+Consistency here is different than consistency in ACID. In ACID, consistency meanas the data would follow the constraints that we specify.
+But here, with replicas, consistency means the data should be in sync.
+
+When we have multiple copies of DB(replication), we need them to be consistent. To be consistent, we choose leader and followers and everytime
+we write, we're only going to write to the leader DB, we would never write to the follower DBs, because the leader is gonna be responsible 
+for all of followers being written the same data, so **eventually** the leader will make sure the data gets written to followers.
+
+We sacrifice the fact that some people for a small portion of time, will see out of date data. For example number of followers which isn't
+a big deal in most cases. 
+
+There's no guarantee on how long that time for eventual consistent would take.
+
+Technically we could have replicas with SQL DBs as well.
+
+Partitioning or sharding with SQL DBs can be done as well, but it's gonna be complex(because of ACID), but NOSQL DBs typically provide
+this by default.
+
+Sharding in SQL DBs is less common.
+
+Partitioning = sharding
 
 ## 16-16 - Replication and Sharding
 These two are different but related.
@@ -704,6 +773,8 @@ A-L is gonna go to first shard and second half go to other shard. But now, runni
 might not work). When we shard, maybe the data in one shard is related to other shard. So keeping things consistent is hard, we need custom logic.
 - hash-based sharding: This is a use case for consistent hashing. Consistent hashing is an algo to shard data(to decide how to distribute data
 into multiple shards)
+
+Q: How do we know how to route a req to the correct DB(when we splitted out a DB into multiple nodes(shards))?
 
 Popular SQL DBs like mysql and postgres, do not have sharding by default. If you want to shard them, you have to implement the logic for that
 at application level. For example how to know where to find data(which shard has the data you're looking for) and it makes sense because SQL DBs
