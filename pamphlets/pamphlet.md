@@ -969,8 +969,7 @@ we have to read it from DB and from app, send that back. It's better to use obje
 
 The interface for reading and writing files from object storage is with HTTP. So we don't have to query anything or write any SQL, we don't need
 to read the entire object storage, we can make a network req to object storage, ask for whatever filename we want(we need to configure it so
-we're the only ones who can access this file). So via HTTP, we get back the media and send it back to user. 
-
+we're the only ones who can access this file). So via HTTP, we get back the media and send it back to user.
 
 ## 19-19 - Message Queues
 If we have a large amount of application events and those app events are going fast so much so that maybe our app server can't handle them
