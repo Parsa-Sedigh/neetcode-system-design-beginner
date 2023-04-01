@@ -480,9 +480,108 @@ it's so high. **So with LFU we don't care how recently it was read, we just care
 
 In caching we wanna speed things up and we're willing to make some tradeoffs(like sacrificing consistency).
 
-## 11-11 - CDNs
-## 12-12 - Proxies and Load Balancing
+## 11-11 - CDNs (content delivery network)
+CNDs are a way that we can cache data closer to end users, so we don't have to make reqs across the world.
 
+We have origin server and CDN servers.
+
+We can't put everything on CDN servers, CDN servers are dumb. We can only put static content that is not changing. We can't have application code
+running on CDN servers(backend code). The content on CDN should be the same for every user.
+
+There are edge servers and they allow you to run code and they're close to end users.
+
+We can have for example the JS code on CDN because that JS code **is gonna be the same for every user**. So JS is hosted on a CDN and since it's
+not changing, it doesn't need to hit the origin server every single time. We can also put img, video.
+
+CDNs:
+- lower the demand on origin server, because we're distributing data on CDN server
+- decreases the latency because of shorter distance
+- increases the reliability and availability of our entire system because what if one of the CDNs server goes down, it's OK we can go to the next 
+closest CDN server
+
+Types of CDNs:
+- push CDN: For example in twitter profile image, as a user uploads a new image for profile, it's gonna be on our origin server initially but
+we're also gonna spread it out or push the img to every single CDN server immediately after it's been added to the origin server
+- pull CDN: similar to traditional caching. When a user uploads a new profile img, it will be on the origin server and we're **not** gonna
+immediately push it to all the CDN servers. Now if a client wanna see that img, first it's gonna hit the closes CDN server to check if that
+profile img already cached at my nearest CDN server? For the first time, no. Now the CDN server is gonna act as a **proxy** because it will
+on behalf of the client, gonna say: This is a cache miss, I gotta find that img on origin server. Origin server is gonna return it to CDN
+and then CDN will cache the img and return it to user. Now any other user close to this CDN will also get that img from CDN as a cache hit. Because
+CDN has it. With this approach, maybe people on other side of world they don't care about that profile img, so we never had to push that img
+to all CDN servers around the world, because it isn't necessary. So CDNs will only have the copies of data for users around them that are
+actually **using** that data, we don't want unnecessary data.
+So a pull CDN would be better if users in certain regions of world have different interests and they're using different data of origin server.
+
+For serving content on CDN, the `Cache-Control` header should have `public` value. But if it was `private`, it indicates that response(like a 
+JS file) should not be cached by a CDN server.
+
+![](../img/11-11-1.png)
+
+## 12-12 - Proxies and Load Balancing
+Two main types of proxies:
+- forward proxy: a middle server that takes our req and then forward it to the actual server, on our behalf. It hides the client from destination
+server. For example your country or computer is not allowed to access the destination server, but you are allowed to access the proxy server.
+So proxy server on behalf of you, does it for you, it goes to destination server and then respond to you. A forward proxy can also block things.
+For example on a corporate or school network, it's common to have all devices that are connected to that corporate network go through some proxy.
+For example forward proxy blocks youtube. So VPN is a forward proxy.
+- reverse proxy: instead of hiding the client or user which is what happens with a forward proxy, a reverse proxy hides the destination server.
+The client doesn't know about the existence of destination server. It just knows about the reverse proxy and everything we do goes through
+reverse proxy. The destination though will probably know about the existence of the client, not necessarily but usually that's the case. An example
+is CDN. Load balancer is another example of reverse proxy.
+
+Q: CDN is a forward proxy or reverse?
+
+As users, we directly go to CDN but possibly if that CDN doesn't have data, it will make another req to the origin server that the client doesn't
+know about. So CDN is reverse proxy.
+
+When we horizontally scale the servers since we want to distribute traffic evenly among the servers(aka we wanna balance the load of user traffic).
+So we use a load balancer.
+
+### Load balancing strategies
+With round-robin each of the servers gets even amount of load. A problem with this could be if one of the servers is less powerful than other ones.
+In that case, we use a variation of round-robin called **weighted round-robin**. For example 50% of req goes to first server and 25% to second and
+25% to third server.
+
+Another strategy is load balance based on the number of least connections. We get a req in load balancer and we route it to the server that has the
+least number of connections.
+
+Another problem with round-robin is just because we're evenly distributing the reqs, maybe some reqs take longer to process(so the connection is
+still alive). Round-robin wouldn't take this into account. In this case, we use load balancing based on least connections approach.
+
+If servers are located on different locations we can load balance based on user location. Asian users to asian server.
+
+Hashing load balancing: Take user req and use some field possibly the IP address or the actual content of what the user is requesting or maybe 
+userId and we create a hash of that so we can route them to the same server that possibly has cache for that user or ... .
+
+There are a couple of types of load balancers: l4 and l7.
+### Layer 4 vs layer 7 load balancing
+l4(transport layer) is at a lower network layer, you can think of this as being TCP layer. L7 is application layer(like http).
+
+l4 LB is typically faster because all we do is look at the IP address to determine how to balance. So we can use location-based balancing
+or round-robin. But we can't be smart because in layer4 we don't have access to the application data, we can't decrypt that. So while this is faster,
+it's less flexible.
+
+With l7 LBs we can look at the application data. Maybe one of the servers is handling certain type of resources, for example one server is responsible
+for tweets and another one for user profile and third one for auth. With l7 load balancer we can intelligently route user reqs to correct server
+based on the **resource** user requested for. Layer7 LB is more expensive because we would have multiple connections(one between
+client-LB and one with LB-server) and we're decrypting every req and then creating a new req whereas in layer4 we're taking a req
+and then forwarding it to another server. we're just taking the IP address of destination of req which was LB IP address and we're gonna replace
+that IP address with the server we route the req to and we just forward it there.
+
+L4 is faster but less flexible and L7 is slower but more flexible.
+
+If we have 1 LB, what happens it goes down?
+
+Well this is a single point of failure. So we need multiple replicas of LB. There are 2 approaches here:
+- all of them working concurrently
+- we just have backup LBs and if the one working currently goes down, the req would be routed to the backup 
+
+Usually LBs can handle very large amount of traffic and handle high throughput, so we won't encounter the scenario where a LB gets
+overloaded. Because they're not doing anything, they're just forwarding the req to other servers.
+
+Maglev about load balancers
+
+Nginx is LB and it can be used for other things. It's easier to use a LB provided by a cloud provider.
 
 ## 13-13 - Consistent Hashing
 We can use hashing(instead of round-robin) to balance the reqs to servers. Let's say we want to hash based on the user's IP address.
@@ -788,6 +887,53 @@ we're not gonna have foreign key constraints, our data is non-relational. The da
 eventually consistent.
 
 ## 17-17 - CAP Theorem
+Applies to distributed DBs(not a single DB, so only with replicated data).
+
+- c: consistency
+- a: availability
+- partition tolerance
+
+P is always part of our choice. So the real theorem is P is guaranteed and we need to choose between C **or** A.
+
+### partition tolerance
+In a distributed system like two replicas of DB(one leader, one follower) we would have a network of 2 nodes.
+If we get a partition(network partition which means our system gets cut, so nodes can't talk to each other), users can still interact with
+nodes individually. Partition tolerance means our system will continue to function if nodes become disconnected.
+If there's a partition, we **could** allow the system to not function at all but in most cases we don't do this. That's why P is guaranteed.
+
+### consistency: 
+In this case consistency means data consistency between the replicated DBs. Every single read will get the most uptodate written data.
+
+Note: While our network is partitioned, none of the data from the leader will be written to follower. So if somebody writes to leader and then
+reads from follower, he won't get the most uptodate data. This is an example where we don't have consistency. So every read doesn't get the
+most up-to-date write.
+
+Consistency in CAP is different than consistency from ACID. Because in ACID, consistency means a **single** node has consistent(following
+constraints) data.
+
+### availability
+In partition, since the follower can't get the most up-to-date data from the leader, how about we disallow users from using just the
+follower(giving up availability), but they can continue to read and write to leader. Because we know reading and writing to leader is
+gonna have consistent(up-to-date) data. But we only achieve this consistency by giving up availability.
+
+In order to have availability, every single node in our system(including the ones that don't have most up-to-date data) will respond to
+valid reqs. So every node is available to respond to reqs.
+
+So we can only choose consistency or availability. Actually it's not guaranteed we can get either of C or A. In most cases, it's OK if we have
+inconsistent data. So we choose availability.
+
+### PACLEC
+PACLEC theorem is an extension of CAP. It's better than CAP.
+
+PAC: is CAP theorem still
+
+It means given P(when there is a partition), choose A or C. Else(if there's no network partition), favor latency or consistency.
+
+So if there's no P, we can choose both A and C. But we will favor latency or consistency. Which means it would take time to backup or replicate
+the new data to followers. Now we have to favor either latency or consistency. In other words, we let the user read data immediately but they may get
+stale data(favor latency, we would have lower latency) **or** we give them consistent data, we give them the most up-to-date data even if they
+have to wait for some time so we can replicate the new data.
+
 ## 18-18 - Object Storage
 Newer than filesystem. It's much more comparable to a filesystem than it is to an actual DB. Because in DB how we structure and filter
 and search for a data is much more important with DBs. But with object storage, data is stored in a flat way. There's no hierarchy, but with filesystems
@@ -807,7 +953,7 @@ and then we can read from storage, but we can't update that file. That's one tra
 Object storage is optimized to store a large amount of objects in a flat way(so no hierarchy) so that we can immediately find objects that we have
 stored, sorta like a hash map where every object has a unique key so that gives us a quick way of accessing that file.
 
-Also we can't have duplicates in hash maps and that's another similarity with blob storage and object storage.
+Also, we can't have duplicates in hash maps and that's another similarity with blob storage and object storage.
 
 In object storage, we need a globally unique names, it's not enough to have a unique name in your s3 instances, but if you have a name conflict with
 anybody else who's using that object storage(like s3) that doesn't work either, it should be global in whole s3.
